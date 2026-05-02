@@ -1,0 +1,183 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy
+import rdkit
+from rdkit import Chem
+from rdkit.Chem import Draw
+from rdkit.Chem import Descriptors
+from rdkit import DataStructs
+from rdkit.Chem import MolStandardize
+from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+from rdkit.Chem.Draw import SimilarityMaps
+from rdkit.Chem import AllChem
+from rdkit.Chem import rdMolDescriptors
+import random
+
+# USES DATA SET FROM THE FOLLOWING:
+# https://www.kaggle.com/datasets/yanmaksi/big-molecules-smiles-dataset
+# Only the smiles are imported, an ID column is added which is from 0 - n.
+
+# https://www.chemcopilot.com/blog/rdkit-for-beginners
+np.set_printoptions(legacy='1.25') # removes the np.float in output
+# [CH]([CH](C(=O)O)O)(C(=O)O)O - tartaric acid SMILE
+# C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)O)O)O - quercetin SMILE
+
+dash = '------------------------------------------------------------------------------'
+#print(dash)
+
+file = pd.read_csv('smiles.csv')
+clean_file = pd.read_csv('acceptable.csv')
+
+clean = input('Do you want to clear the acceptance.csv? (Y/N): ')
+if clean == 'Y':
+    clean_file.drop(labels=range(0,len(clean_file['id'])), axis=0, inplace=True)
+    clean_file.to_csv('acceptable.csv', index=False)
+
+delay = input('This is a delay - end the programme now to remove all rows in acceptance.csv if Y was chosen.')
+
+acceptable = []
+unacceptable = []
+
+# Scans all the entries - rest is manual and random !
+
+for n in range(len(file['id'])):
+    name = file['id'][n]
+    smiles = file['smiles'][n]
+
+    molecule = Chem.MolFromSmiles(smiles)
+
+    def lipinski(mass, logp, hdon, hacc):
+        if mass > 500 or logp > 5 or hdon > 5 or hacc > 10:
+            return print('Predicted poor oral availability')
+        else:
+            return print('Predicted good oral availability')
+
+    def liptest(mass, logp, hdon, hacc):
+        if mass > 500 or logp > 5 or hdon > 5 or hacc > 10:
+            return 0
+        else:
+            return 1
+
+    #print(f'{name} MW = {Descriptors.MolWt(molecule):.2f}')
+    #num_molecule = molecule.GetNumAtoms(onlyExplicit=False)
+    #print(f'No. of atoms (including Hs) in {name} is: {num_molecule}')
+    #print(f'No. of H bond donors: {Descriptors.NumHDonors(molecule)}')
+    #print(f'No. of H bond acceptors: {Descriptors.NumHAcceptors(molecule)}')
+    #print(f'Calculated LogP: {Descriptors.MolLogP(molecule):.2f}')
+    #print('No. of stereocentres: ',Chem.rdMolDescriptors.CalcNumAtomStereoCenters(molecule))
+    #print('Atom no. and orientation: ',Chem.FindMolChiralCenters(molecule, includeUnassigned=True))
+    stereo = list(EnumerateStereoisomers(molecule))
+    #print(f"Generated {len(stereo)} stereoisomer(s).")
+
+    lip = lipinski(Descriptors.MolWt(molecule),Descriptors.MolLogP(molecule), Descriptors.NumHDonors(molecule), Descriptors.NumHAcceptors(molecule) )
+    liptest = liptest(Descriptors.MolWt(molecule),Descriptors.MolLogP(molecule), Descriptors.NumHDonors(molecule), Descriptors.NumHAcceptors(molecule) )
+    # Generate fingerprints
+    aspirin = Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O")
+    aspirin_fp = Chem.RDKFingerprint(aspirin)
+    molecule_fp = Chem.RDKFingerprint(molecule)
+
+    if liptest == 1:
+        similarity = DataStructs.TanimotoSimilarity(aspirin_fp, molecule_fp)
+        acceptable.append([name, smiles, round(Descriptors.MolLogP(molecule), 3), round(similarity, 3)])
+        acc = pd.DataFrame([[name, smiles, round(Descriptors.MolLogP(molecule), 3), round(similarity, 3)]],
+                           columns=['id', 'smiles', 'logp', 'similarity to aspirin'])
+        acc.to_csv('acceptable.csv', mode='a', index=False, header=False)
+
+        # Calculate similarity
+        #print(f"Similarity between aspirin and {name}: {similarity:.2f}")
+        #print(dash)
+
+    if liptest == 0:
+        unacceptable.append([name, smiles])
+    #print(dash)
+    print(f'Remaining: {name}/{len(file['id'])}')
+
+similar_list = []
+acc = pd.read_csv('acceptable.csv')
+
+for n in range(len(acc['id'])):
+    if acc['similarity to aspirin'][n] >= 0.7:
+        similar_list.append(acc['id'][n])
+
+print('The following list has a similarity to aspirin of 0.7 or above:',similar_list)
+
+cont = input('Do you want to proceed to random SMILES w/ images? (Y/N): ')
+
+
+
+
+if cont == 'Y':
+    for n in range(len(file['id'])):
+        name = file['id'][random.randint(0,len(file['id']))]
+        smiles = file['smiles'][random.randint(0,len(file['id']))]
+
+        molecule = Chem.MolFromSmiles(smiles)
+        molecule_img = Draw.MolToImage(molecule)
+        #molecule_img.show()
+        plt.imshow(molecule_img)
+        plt.axis('off')
+        plt.show()
+
+
+        def lipinski(mass, logp, hdon, hacc):
+            if mass > 500 or logp > 5 or hdon > 5 or hacc > 10:
+                return print('Predicted poor oral availability')
+            else:
+                return print('Predicted good oral availability')
+
+        def liptest(mass, logp, hdon, hacc):
+            if mass > 500 or logp > 5 or hdon > 5 or hacc > 10:
+                return 0
+            else:
+                return 1
+
+
+        print(f'{name} MW = {Descriptors.MolWt(molecule):.2f}')
+        num_molecule = molecule.GetNumAtoms(onlyExplicit=False)
+        #print(f'No. of atoms (including Hs) in {name} is: {num_molecule}')
+        print(f'No. of H bond donors: {Descriptors.NumHDonors(molecule)}')
+        print(f'No. of H bond acceptors: {Descriptors.NumHAcceptors(molecule)}')
+        print(f'Calculated LogP: {Descriptors.MolLogP(molecule):.2f}')
+        print('No. of stereocentres: ',Chem.rdMolDescriptors.CalcNumAtomStereoCenters(molecule))
+        print('Atom no. and orientation: ',Chem.FindMolChiralCenters(molecule, includeUnassigned=True))
+        stereo = list(EnumerateStereoisomers(molecule))
+        print(f"Generated {len(stereo)} stereoisomer(s).")
+
+        lip = lipinski(Descriptors.MolWt(molecule),Descriptors.MolLogP(molecule), Descriptors.NumHDonors(molecule), Descriptors.NumHAcceptors(molecule) )
+
+        fig, axes = plt.subplots(1, len(stereo))
+        img_list = []
+
+        # Generate fingerprints
+        aspirin = Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O")
+        aspirin_fp = Chem.RDKFingerprint(aspirin)
+        molecule_fp = Chem.RDKFingerprint(molecule)
+
+        liptest = liptest(Descriptors.MolWt(molecule),Descriptors.MolLogP(molecule), Descriptors.NumHDonors(molecule), Descriptors.NumHAcceptors(molecule) )
+        if liptest == 1:
+            similarity = DataStructs.TanimotoSimilarity(aspirin_fp, molecule_fp)
+            acceptable.append([name, smiles,round(Descriptors.MolLogP(molecule),3), round(similarity,3)])
+            acc = pd.DataFrame([[name, smiles, round(Descriptors.MolLogP(molecule),3),round(similarity,3)]], columns=['id','smiles','logp','similarity to aspirin'])
+            acc.to_csv('acceptable.csv', mode='a',index=False,header=False)
+
+            # Calculate similarity
+            print(f"Similarity between aspirin and {name}: {similarity:.2f}")
+            print(dash)
+
+        if len(stereo) > 1:
+            for s in range(len(stereo)):
+                stereo_img = Draw.MolToImage(stereo[s])
+                img_list.append(stereo_img)
+                stereo_select = Chem.FindMolChiralCenters(stereo[s], includeUnassigned=True)
+                #stereo_img.show()
+                axes[s].imshow(img_list[s])
+                axes[s].axis('off')
+                #axes[s].set_title(f'{stereo_select[0][1]}, {stereo_select[1][1]}')
+            plt.tight_layout()
+            plt.show()
+
+        print(dash)
+
+
+
