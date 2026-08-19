@@ -1,0 +1,57 @@
+import io
+
+from rdkit import Chem
+from rdkit.Chem import Draw, AllChem
+import py3Dmol
+
+from nicegui import ui
+import matplotlib.pyplot as plt
+import tkinter as tk
+from PIL import Image, ImageTk
+
+
+class MoleculeGrapher:
+    def __init__(self,name,smiles):
+        self.name = name
+        self.smiles = smiles
+
+    def graph(self,mol=None, save_name=None):
+        self.mol = Chem.MolFromSmiles(self.smiles)
+        mol_img = Draw.MolToImage(self.mol, )
+        #mol_img.show()
+        self.save_name = self.name+".png"
+        plt.imshow(mol_img)
+        plt.title(self.name)
+        plt.axis("off")
+        plt.show()
+
+        #mol_img.save(save_name)
+
+        #saved_mol_img = Draw.MolToImage(self.mol)
+
+        # root = tk.Tk()
+        # tk_img = ImageTk.PhotoImage(saved_mol_img)
+        # label = tk.Label(root, image=tk_img)
+        # label.pack()
+        # root.mainloop()
+
+        self.mol_3d = Chem.AddHs(self.mol)
+        AllChem.EmbedMolecule(self.mol_3d, AllChem.ETKDG())
+        AllChem.MMFFOptimizeMolecule(self.mol_3d)
+        img_3d = Draw.MolToImage(self.mol_3d)
+
+        view = py3Dmol.view()
+        view.addModel(Chem.MolToMolBlock(self.mol))
+        view.setStyle({'stick':{},'sphere':{'scale':0.3}})
+        view.zoomTo()
+
+        with open('molecule_3d.html','w') as f:
+            f.write(view._make_html())
+
+
+test = MoleculeGrapher(' 2-hydroxyethyl acrylate','C=CC(=O)OCCO')
+test.graph()
+
+
+
+
