@@ -1,13 +1,7 @@
-import io
-
 from rdkit import Chem
 from rdkit.Chem import Draw, AllChem
 import py3Dmol
-
-from nicegui import ui
 import matplotlib.pyplot as plt
-import tkinter as tk
-from PIL import Image, ImageTk
 
 
 class MoleculeGrapher:
@@ -15,43 +9,51 @@ class MoleculeGrapher:
         self.name = name
         self.smiles = smiles
 
-    def graph(self,mol=None, save_name=None):
+    def graph(self,mol=None, save_name=None, mol_3d=None):
         self.mol = Chem.MolFromSmiles(self.smiles)
-        mol_img = Draw.MolToImage(self.mol, )
-        #mol_img.show()
+        mol_img = Draw.MolToImage(self.mol)
         self.save_name = self.name+".png"
+        
         plt.imshow(mol_img)
         plt.title(self.name)
         plt.axis("off")
         plt.show()
 
-        #mol_img.save(save_name)
-
-        #saved_mol_img = Draw.MolToImage(self.mol)
-
-        # root = tk.Tk()
-        # tk_img = ImageTk.PhotoImage(saved_mol_img)
-        # label = tk.Label(root, image=tk_img)
-        # label.pack()
-        # root.mainloop()
 
         self.mol_3d = Chem.AddHs(self.mol)
-        AllChem.EmbedMolecule(self.mol_3d, AllChem.ETKDG())
-        AllChem.MMFFOptimizeMolecule(self.mol_3d)
-        img_3d = Draw.MolToImage(self.mol_3d)
 
-        view = py3Dmol.view()
-        view.addModel(Chem.MolToMolBlock(self.mol))
-        view.setStyle({'stick':{},'sphere':{'scale':0.3}})
+        params = AllChem.ETKDGv3()
+        params.randomSeed = 42
+        params.numThreads = 0
+        conf_ids = AllChem.EmbedMultipleConfs(self.mol_3d, numConfs=20, params=params)
+
+        energies = []
+        if AllChem.MMFFHasAllMoleculeParams(self.mol_3d):
+            results = AllChem.MMFFOptimizeMoleculeConfs(self.mol_3d, maxIters=2000)
+            energies = [e for (converged, e) in results]
+        else:
+            results = AllChem.UFFOptimizeMoleculeConfs(self.mol_3d, maxIters=2000)
+            energies = [e for (converged, e) in results]
+
+        best_id = int(min(range(len(energies)), key=lambda i: energies[i]))
+        best_conf = self.mol_3d.GetConformer(conf_ids[best_id])
+
+        mol_best = Chem.Mol(self.mol_3d)
+        mol_best.RemoveAllConformers()
+        mol_best.AddConformer(best_conf, assignId=True)
+
+        view = py3Dmol.view(width=1200, height=1200)
+        view.addModel(Chem.MolToMolBlock(mol_best), self.name)
+        view.setStyle({'stick': {'scale': 1}, 'sphere': {'scale': 0.3}})
         view.zoomTo()
 
-        with open('molecule_3d.html','w') as f:
+        with open('molecule_3d.html', 'w') as f:
             f.write(view._make_html())
 
+smile = 'C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)O)O)O'
 
-test = MoleculeGrapher(' 2-hydroxyethyl acrylate','C=CC(=O)OCCO')
+test = MoleculeGrapher('Quercetin',smile)
 test.graph()
-
 
 
 
